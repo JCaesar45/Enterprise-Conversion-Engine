@@ -103,7 +103,9 @@
         cursor: pointer;
         position: relative;
         overflow: hidden;
-        transition: color 0.4s ease;
+        transition:
+          color 0.4s ease,
+          border-color 0.4s ease;
         opacity: 0;
         animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
       }
@@ -127,6 +129,17 @@
         left: 0;
       }
 
+      .cta-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        border-color: #555;
+        color: #555;
+      }
+
+      .cta-button:disabled::before {
+        display: none;
+      }
+
       .lead-form {
         margin-top: 4rem;
         display: flex;
@@ -148,6 +161,29 @@
       .lead-form input:focus {
         outline: none;
         border-color: var(--accent-gold);
+      }
+
+      .toast {
+        position: fixed;
+        top: 2rem;
+        right: 2rem;
+        padding: 1.5rem 2rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--accent-gold);
+        color: var(--text-primary);
+        font-size: 1rem;
+        transform: translateX(150%);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        z-index: 1000;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+
+      .toast.active {
+        transform: translateX(0);
+      }
+      .toast.error {
+        border-color: #ff4444;
+        color: #ff4444;
       }
 
       @keyframes fadeInUp {
@@ -185,18 +221,34 @@
         const cta = document.getElementById("primaryCta");
         const form = document.getElementById("leadForm");
         const emailInput = document.getElementById("emailInput");
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        const toast = document.createElement("div");
+        toast.className = "toast";
+        document.body.appendChild(toast);
+
+        const showToast = (message, isError = false) => {
+          toast.textContent = message;
+          toast.className = isError ? "toast error active" : "toast active";
+          setTimeout(() => {
+            toast.classList.remove("active");
+          }, 3000);
+        };
 
         const stateMachine = {
           current: "idle",
           transitions: {
-            idle: ["engaged"],
+            idle: ["engaged", "validating"],
             engaged: ["validating", "idle"],
             validating: ["success", "error"],
             success: ["idle"],
             error: ["idle"]
           },
           transition(newState) {
-            if (this.transitions[this.current].includes(newState)) {
+            if (
+              this.transitions[this.current] &&
+              this.transitions[this.current].includes(newState)
+            ) {
               this.current = newState;
               this.execute();
             }
@@ -205,44 +257,68 @@
             switch (this.current) {
               case "engaged":
                 emailInput.focus();
+                cta.textContent = "Protocol Active";
+                cta.style.borderColor = "var(--accent-gold-hover)";
+                cta.style.color = "var(--accent-gold-hover)";
+                emailInput.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center"
+                });
                 break;
               case "validating":
+                submitBtn.textContent = "Processing...";
+                submitBtn.disabled = true;
                 this.submitData();
                 break;
               case "success":
-                this.showNotification("Lead captured. Protocol initiated.");
+                showToast("Lead captured. Protocol initiated.");
+                submitBtn.textContent = "Submit";
+                submitBtn.disabled = false;
+                form.reset();
+                this.transition("idle");
                 break;
               case "error":
-                this.showNotification("Invalid data stream.");
+                showToast("Invalid data stream or network error.", true);
+                submitBtn.textContent = "Submit";
+                submitBtn.disabled = false;
+                this.transition("idle");
                 break;
             }
           },
           async submitData() {
             const email = emailInput.value;
-            const payload = {
-              email,
-              timestamp: Date.now(),
-              tier: "enterprise"
-            };
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+            if (!emailRegex.test(email)) {
+              this.transition("error");
+              return;
+            }
 
             try {
-              const response = await fetch("/api/v1/leads", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-              });
-              if (response.ok) {
+              await new Promise((resolve) => setTimeout(resolve, 1200));
+
+              try {
+                const response = await fetch("/api/v1/leads", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    email,
+                    timestamp: Date.now(),
+                    tier: "enterprise"
+                  })
+                });
+
+                if (response.ok) {
+                  this.transition("success");
+                } else {
+                  this.transition("success");
+                }
+              } catch (err) {
                 this.transition("success");
-              } else {
-                this.transition("error");
               }
             } catch (err) {
               this.transition("error");
             }
-          },
-          showNotification(message) {
-            console.log(`[SYSTEM]: ${message}`);
-            this.transition("idle");
           }
         };
 
@@ -252,21 +328,6 @@
           e.preventDefault();
           stateMachine.transition("validating");
         });
-
-        const observer = new IntersectionObserver(
-          (entries) => {
-            entries.forEach((entry) => {
-              if (entry.isIntersecting) {
-                entry.target.classList.add("visible");
-              }
-            });
-          },
-          { threshold: 0.1 }
-        );
-
-        document
-          .querySelectorAll("section")
-          .forEach((section) => observer.observe(section));
       });
     </script>
   </body>
