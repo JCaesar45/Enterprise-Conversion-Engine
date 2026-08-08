@@ -57,8 +57,7 @@ java -jar target/transaction-api-1.0.0.jar
 - `POST /api/v1/leads` (Python) - Ingests and validates lead data.
 - `WS /` (TypeScript) - Establishes persistent connection for dashboard state updates.
 - `POST /api/v1/transactions/process` (Java) - Processes high-value financial transactions.
-```
-```
+
 ### References
 
 Flanagan, D. (2020). *JavaScript: The definitive guide* (7th ed.). O'Reilly Media.
